@@ -1,9 +1,10 @@
 {
   "contract": 1,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "salt": "3006.27",
   "pillar_schema": 1,
   "features": [
-    "job_diagnostics_v1"
+    "job_diagnostics_v1",
+    "configuration_recovery_v1"
   ]
 }
