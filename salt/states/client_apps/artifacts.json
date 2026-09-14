@@ -17,10 +17,10 @@
   "paseo": {
     "version": "0.8.0",
     "repository": "https://github.com/oduflow/paseo.git",
-    "commit": "3c04e96bce26c463305f49a317a6f5ee0863ee6f",
+    "commit": "3f3555c5a64e9bbffa139c1482c691757a2a5a25",
     "archive": {
-      "source": "salt://client_apps/artifacts/paseo-3c04e96bce26c463305f49a317a6f5ee0863ee6f.tar.gz",
-      "hash": "sha256=cd4e24201def8a642f169bee90dcab3326363c2bfb8843229a234011e38bff3a"
+      "source": "salt://client_apps/artifacts/paseo-3f3555c5a64e9bbffa139c1482c691757a2a5a25.tar.gz",
+      "hash": "sha256=5b4ae7e4347ad4f4f5854ba9e16a35daf022e4281fa8352990da13cd7c7f85da"
     },
     "packages": [
       "@getpaseo/highlight",
