@@ -79,6 +79,48 @@ class MinionReceiptTests(unittest.TestCase):
         self.assertEqual(job.version()["desired"], "b" * 40)
         self.assertEqual(job.version()["verified"], commit)
 
+    def test_exception_diagnostic_is_bound_and_does_not_leak_or_authorize_replay(self):
+        self.apply.side_effect = ValueError("PRIVATE-CANARY password=secret")
+        result = self.run_job()
+        self.assertEqual(result["status"], "unknown")
+        detail = job.diagnostics(JID, REQUEST, "configure")
+        self.assertEqual(detail["diagnostic"]["phase"], "states_execute")
+        self.assertEqual(detail["diagnostic"]["reason"], "exception")
+        self.assertEqual(detail["diagnostic"]["error_type"], "ValueError")
+        self.assertEqual(detail["diagnostic"]["code"], "")
+        self.assertEqual(self.run_job(), result)
+        self.apply.assert_called_once()
+        with self.assertRaisesRegex(RuntimeError, "binding_conflict"):
+            job.diagnostics(JID, REQUEST, "production")
+        for path in self.root.iterdir():
+            self.assertNotIn("PRIVATE-CANARY", path.read_text())
+
+    def test_invalid_state_return_has_distinct_diagnostic_without_raw_errors(self):
+        self.apply.return_value = ["Rendering failed: PRIVATE-CANARY"]
+        self.assertEqual(self.run_job()["status"], "unknown")
+        detail = job.diagnostics(JID, REQUEST, "configure")["diagnostic"]
+        self.assertEqual((detail["phase"], detail["reason"]), ("result_reduce", "invalid_result"))
+        self.assertNotIn("PRIVATE-CANARY", str(detail))
+
+    def test_legacy_receipt_has_no_diagnostic_and_remains_authoritative(self):
+        result = self.run_job()
+        (self.root / ("diagnostic-" + REQUEST + ".json")).unlink()
+        self.assertEqual(job.diagnostics(JID, REQUEST, "configure"), {})
+        self.assertEqual(job.status(JID, REQUEST, "configure"), result)
+
+    def test_diagnostic_disk_failure_cannot_mask_successful_receipt(self):
+        original = job._write
+
+        def write(directory, name, value):
+            if name.startswith("diagnostic-"):
+                raise OSError("PRIVATE-CANARY")
+            return original(directory, name, value)
+
+        with patch.object(job, "_write", side_effect=write):
+            result = self.run_job()
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(job.status(JID, REQUEST, "configure"), result)
+
     def test_addressed_infrastructure_sources_are_bound_without_public_fileserver(self):
         source = '{"roles/litellm.sls":"test: {}"}'
         job.__salt__["oduflow_release.sources_options"] = lambda *args: nullcontext({})

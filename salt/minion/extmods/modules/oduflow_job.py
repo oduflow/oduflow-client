@@ -12,6 +12,7 @@ import json
 import os
 import re
 import stat
+import time
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -31,6 +32,164 @@ _PROFILES = {
     "litellm_sync": "litellm_metering.sync",
 }
 _FIELDS = {"protocol", "minion_id", "request_id", "jid", "profile", "state_digest"}
+
+# Diagnostics are a separate versioned surface, never completion/replay evidence.
+_DIAGNOSTIC_PHASES = {
+    "setup",
+    "release_prepare",
+    "states_execute",
+    "result_reduce",
+    "result_persist",
+    "completed",
+}
+_DIAGNOSTIC_REASONS = {"in_progress", "exception", "invalid_result", "states_failed", "completed"}
+_DIAGNOSTIC_ERRORS = {
+    "ValueError",
+    "TypeError",
+    "KeyError",
+    "OSError",
+    "RuntimeError",
+    "OtherException",
+    "",
+}
+_DIAGNOSTIC_CODES = {
+    "",
+    "client_repository_git_failed",
+    "client_release_checkout_modified",
+    "client_release_pillar_identity_invalid",
+    "client_repository_path_unsafe",
+    "client_release_contract_unsupported",
+    "client_repository_host_keys_invalid",
+    "oduflow_job_state_cache_read_refused",
+    "oduflow_job_parallel_unsupported",
+}
+
+
+def _validate_diagnostic(value):
+    choices = {
+        "phase": {
+            "setup",
+            "release_prepare",
+            "states_execute",
+            "result_reduce",
+            "result_persist",
+            "completed",
+        },
+        "reason": {"in_progress", "exception", "invalid_result", "states_failed", "completed"},
+        "error_type": {
+            "",
+            "ValueError",
+            "TypeError",
+            "KeyError",
+            "OSError",
+            "RuntimeError",
+            "OtherException",
+        },
+        "code": {
+            "",
+            "client_repository_git_failed",
+            "client_release_checkout_modified",
+            "client_release_pillar_identity_invalid",
+            "client_repository_path_unsafe",
+            "client_release_contract_unsupported",
+            "client_repository_host_keys_invalid",
+            "oduflow_job_state_cache_read_refused",
+            "oduflow_job_parallel_unsupported",
+        },
+    }
+    if not isinstance(value, dict) or set(value) != set(choices) | {
+        "schema",
+        "started_at",
+        "updated_at",
+        "frames",
+    }:
+        return None
+    if type(value["schema"]) is not int or value["schema"] != 1:
+        return None
+    if any(
+        type(value[key]) is not str or value[key] not in allowed for key, allowed in choices.items()
+    ):
+        return None
+    if any(
+        type(value[key]) is not int or not 0 < value[key] < 2**40
+        for key in ("started_at", "updated_at")
+    ):
+        return None
+    if value["updated_at"] < value["started_at"]:
+        return None
+    frames = value["frames"]
+    if not isinstance(frames, list) or len(frames) > 8:
+        return None
+    for frame in frames:
+        if not isinstance(frame, dict) or set(frame) != {"module", "line"}:
+            return None
+        if frame["module"] not in ("oduflow_job.py", "oduflow_release.py"):
+            return None
+        if type(frame["line"]) is not int or not 0 < frame["line"] < 100000:
+            return None
+    return value
+
+
+def _diagnostic(directory, binding, phase, reason="in_progress", exc=None, started_at=None):
+    """Build from constants; never serialize exception text, locals or Salt returns."""
+    now = int(time.time())
+    error_type, code, frames = "", "", []
+    if exc is not None:
+        error_type = type(exc).__name__
+        if error_type not in _DIAGNOSTIC_ERRORS:
+            error_type = "OtherException"
+        if len(exc.args) == 1 and type(exc.args[0]) is str and exc.args[0] in _DIAGNOSTIC_CODES:
+            code = exc.args[0]
+        trace = exc.__traceback__
+        while trace:
+            # Only our fixed source names and numeric locations leave the host.
+            filename = Path(trace.tb_frame.f_code.co_filename).name
+            if filename in {"oduflow_job.py", "oduflow_release.py"}:
+                frames.append({"module": filename, "line": trace.tb_lineno})
+            trace = trace.tb_next
+    value = dict(
+        schema=1,
+        phase=phase,
+        reason=reason,
+        error_type=error_type,
+        code=code,
+        frames=frames[-8:],
+        started_at=started_at or now,
+        updated_at=now,
+    )
+    try:
+        _write(
+            directory,
+            "diagnostic-" + binding["request_id"] + ".json",
+            {"binding": binding, "diagnostic": value},
+        )
+    except Exception:
+        # Optional evidence must not mask the execution or terminal receipt.
+        pass
+
+
+def diagnostics(
+    jid, request_id, profile, state_digest="", client_revision="", source_digest="", **kwargs
+):
+    """Read optional evidence without changing the durable execution receipt."""
+    _metadata(kwargs)
+    binding = _binding(jid, request_id, profile, state_digest, client_revision, source_digest)
+    with _directory(False) as directory:
+        if directory is None:
+            return {}
+        if _existing(directory, binding, live=_running(directory, request_id)) is None:
+            return {}
+        value = _read(directory, "diagnostic-" + request_id + ".json")
+        if value is None:
+            return {}
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"binding", "diagnostic"}
+            or value.get("binding") != binding
+            or not _validate_diagnostic(value.get("diagnostic"))
+        ):
+            raise _JobError("oduflow_job_binding_conflict")
+        return value
 
 
 class _JobError(RuntimeError):
@@ -445,6 +604,9 @@ def run(
                     return _result(binding, "unknown")
                 _write(directory, "jid-" + binding["jid"] + ".json", binding)
                 _write(directory, "request-" + request_id + ".json", _result(binding, "running"))
+                started_at = int(time.time())
+                phase = "setup"
+                _diagnostic(directory, binding, phase, started_at=started_at)
                 if client_revision and profile == "configure":
                     versions = _read(directory, "client-version.json") or {}
                     versions.update(desired=client_revision, request_id=request_id)
@@ -466,17 +628,39 @@ def run(
                         local = __salt__["oduflow_release.sources_options"](
                             state_sources_json, binding["minion_id"]
                         )
+                    phase = "release_prepare"
+                    _diagnostic(directory, binding, phase, started_at=started_at)
                     with _execution_safety(), local as release_options:
                         options.update(release_options)
+                        phase = "states_execute"
+                        _diagnostic(directory, binding, phase, started_at=started_at)
                         states = (
                             __salt__["state.high"](high, **options)
                             if profile == "custom"
                             else __salt__["state.apply"](_PROFILES[profile], **options)
                         )
+                    phase = "result_reduce"
                     reduced = _reduce(binding, states)
-                except Exception:
+                    if reduced["status"] == "unknown":
+                        _diagnostic(
+                            directory, binding, phase, "invalid_result", started_at=started_at
+                        )
+                except Exception as exc:
+                    _diagnostic(directory, binding, phase, "exception", exc, started_at)
                     reduced = _result(binding, "unknown")
-                _write(directory, "request-" + request_id + ".json", reduced)
+                try:
+                    _write(directory, "request-" + request_id + ".json", reduced)
+                except Exception as exc:
+                    _diagnostic(directory, binding, "result_persist", "exception", exc, started_at)
+                    raise
+                if reduced["status"] in {"succeeded", "failed"}:
+                    _diagnostic(
+                        directory,
+                        binding,
+                        "completed",
+                        "completed" if reduced["status"] == "succeeded" else "states_failed",
+                        started_at=started_at,
+                    )
                 if client_revision and profile == "configure" and reduced["status"] == "succeeded":
                     versions.update(applied=client_revision, verified=client_revision)
                     _write(directory, "client-version.json", versions)
