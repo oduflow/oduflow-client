@@ -106,7 +106,7 @@ client-apps-paseo-artifact:
       - file: client-apps-cache
 {% endif %}
 
-{% if method == 'prebuilt' and not runtime.get('token') %}
+{% if method == 'prebuilt' %}
 client-apps-paseo-runtime:
   file.managed:
     - name: /var/cache/oduflow-apps/paseo-runtime.tar.gz
@@ -134,7 +134,7 @@ client-apps-install-paseo:
 {% if method == 'source' and artifacts.paseo.get('archive') %}
       - file: client-apps-paseo-artifact
 {% endif %}
-{% if method == 'prebuilt' and not runtime.get('token') %}
+{% if method == 'prebuilt' %}
       - file: client-apps-paseo-runtime
 {% endif %}
 {% endif %}

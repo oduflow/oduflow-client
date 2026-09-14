@@ -38,14 +38,8 @@ class ClientReleaseTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "--quiet", "-m", "Fixture")
         self.commit = self.git("rev-parse", "HEAD")
-        config = self.root / "config"
-        config.mkdir(mode=0o700)
-        for name in ("key", "known_hosts"):
-            (config / name).write_text("fixture")
-            (config / name).chmod(0o600)
         for key, value in {
             "ROOT": self.root / "releases",
-            "CONFIG": config,
             "REPOSITORY": str(self.source),
             "_OWNER_UID": os.getuid(),
             "_RUN_ROOT": str(self.root),

@@ -9,14 +9,11 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
-from cryptography.hazmat.primitives import serialization
-
 __virtualname__ = "oduflow_release"
 __salt__ = {}
 __opts__ = {}
 ROOT = Path("/opt/oduflow/client/releases")
-CONFIG = Path("/etc/oduflow/client-repository")
-REPOSITORY = "git@github.com:oduflow/oduflow-client.git"
+REPOSITORY = "https://github.com/oduflow/oduflow-client.git"
 _OWNER_UID = 0
 _RUN_ROOT = "/run"
 
@@ -50,13 +47,6 @@ def _git(path, *args):
         GIT_TERMINAL_PROMPT="0",
         GIT_CONFIG_NOSYSTEM="1",
         GIT_CONFIG_GLOBAL="/dev/null",
-        GIT_SSH_COMMAND=(
-            "ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes "
-            "-o StrictHostKeyChecking=yes -o UserKnownHostsFile="
-            + str(CONFIG / "known_hosts")
-            + " -i "
-            + str(CONFIG / "key")
-        ),
     )
     result = subprocess.run(
         ["git", "-c", "core.hooksPath=/dev/null", "-C", str(path), *args],
@@ -85,9 +75,6 @@ def checkout(commit):
         ):
             raise ValueError("client_release_checkout_modified")
     else:
-        _trusted(CONFIG)
-        _trusted(CONFIG / "key", directory=False)
-        _trusted(CONFIG / "known_hosts", directory=False)
         # An interrupted fetch never becomes a release. A later request may retry
         # read-only Git operations in a fresh staging directory.
         with tempfile.TemporaryDirectory(prefix=".fetch-", dir=ROOT) as stage:
@@ -143,28 +130,6 @@ def local_options(commit, minion_id):
     pillar = __salt__["pillar.items"]()
     if not isinstance(pillar, dict) or "client-" + pillar.get("instance_uuid", "") != minion_id:
         raise ValueError("client_release_pillar_identity_invalid")
-    repository = pillar.get("client_repository")
-    if repository:
-        key, hosts = repository["private_key"], repository["known_hosts"]
-        serialization.load_ssh_private_key(key.encode(), password=None)
-        if not isinstance(hosts, str) or not hosts.startswith("github.com "):
-            raise ValueError("client_repository_host_keys_invalid")
-        CONFIG.mkdir(parents=True, exist_ok=True, mode=0o700)
-        _trusted(CONFIG)
-        for name, content in (("key", key), ("known_hosts", hosts)):
-            target = CONFIG / name
-            if target.exists() or target.is_symlink():
-                _trusted(target, directory=False)
-            # Atomic replacement keeps Git from reading a partially written key.
-            fd, temporary = tempfile.mkstemp(prefix=".credential-", dir=CONFIG)
-            try:
-                with os.fdopen(fd, "w") as stream:
-                    stream.write(content)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, target)
-            finally:
-                Path(temporary).unlink(missing_ok=True)
     with _tree_options(Path(checkout(commit)), minion_id, pillar) as value:
         yield value
 

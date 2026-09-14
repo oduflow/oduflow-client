@@ -11,9 +11,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import urllib.request
 from pathlib import Path
-from urllib.parse import urlsplit
 
 ROOT = Path("/opt/oduflow")
 CACHE = Path("/var/cache/oduflow-apps")
@@ -147,61 +145,11 @@ def install_paseo(spec, target, node, env):
     run([str(node / "node"), "--check", str(entry)], env)
 
 
-class NoRuntimeRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise ValueError("IDE download redirects are not allowed")
-
-
-def download_ide_runtime(runtime, archive_path):
-    """Keep the artifact-only bearer credential out of argv, URLs and Salt output."""
-    parsed = urlsplit(runtime["source"])
-    if (
-        parsed.scheme != "https"
-        or not parsed.hostname
-        or parsed.username
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError("IDE download requires a plain HTTPS URL")
-    token = runtime["token"]
-    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", token):
-        raise ValueError("Invalid IDE download credential")
-    if archive_path.exists():
-        with archive_path.open("rb") as stream:
-            if "sha256=" + hashlib.file_digest(stream, "sha256").hexdigest() == runtime["hash"]:
-                return
-    temporary = archive_path.with_suffix(".download")
-    try:
-        request = urllib.request.Request(
-            runtime["source"], headers={"Authorization": "Bearer " + token}
-        )
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRuntimeRedirect())
-        descriptor = os.open(
-            temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600
-        )
-        with os.fdopen(descriptor, "wb") as output, opener.open(request, timeout=120) as response:
-            digest = hashlib.sha256()
-            size = 0
-            while chunk := response.read(1024 * 1024):
-                size += len(chunk)
-                if size > 512 * 1024 * 1024:
-                    raise ValueError("IDE archive too large")
-                digest.update(chunk)
-                output.write(chunk)
-            if "sha256=" + digest.hexdigest() != runtime["hash"]:
-                raise ValueError("IDE archive checksum mismatch")
-        temporary.replace(archive_path)
-    finally:
-        temporary.unlink(missing_ok=True)
-
-
 def install_paseo_runtime(spec, target, node, env):
     runtime = spec["runtime"]
     if not re.fullmatch(r"sha256=[0-9a-f]{64}", runtime.get("hash", "")):
         raise ValueError("Paseo runtime needs a SHA256 checksum")
     archive_path = CACHE / "paseo-runtime.tar.gz"
-    if runtime.get("token"):
-        download_ide_runtime(runtime, archive_path)
     with archive_path.open("rb") as stream:
         digest = "sha256=" + hashlib.file_digest(stream, "sha256").hexdigest()
     if digest != runtime["hash"]:

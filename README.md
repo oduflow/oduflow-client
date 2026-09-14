@@ -1,7 +1,7 @@
 # Oduflow Client
 
 Versioned Salt configuration for a client VM: Salt Minion, Tailscale, Oduflow,
-Paseo, storage, client agents, SSH, backups, and the client's production Odoo stack.
+IDE, storage, client agents, SSH, backups, and the client's production Odoo stack.
 The control Odoo addons, cloud provider APIs, Salt Master, Headscale server and
 LiteLLM infrastructure live in `oduflow/oduflow-platform`.
 
@@ -10,9 +10,8 @@ LiteLLM infrastructure live in `oduflow/oduflow-platform`.
 The platform selects a full 40-character Git commit SHA. Cloud-init checks out
 that exact commit into `/opt/oduflow/client/releases/<SHA>` and invokes
 `bootstrap.sh UUID MASTER FINGERPRINT INPUT_DIRECTORY`. The input directory
-contains private, one-use VPN and minion enrollment files. The repository's
-read-only deploy key and pinned GitHub host keys live separately under
-`/etc/oduflow/client-repository/`; they never belong in Git or an image.
+contains private, one-use VPN and minion enrollment files. Client release checkouts
+use public HTTPS and require no repository credentials.
 
 After enrollment, the platform queues `oduflow_job.run` with a fixed operation
 profile and the selected SHA. The client checks out the release and applies its
@@ -35,7 +34,7 @@ Selecting an older SHA is not a database or filesystem rollback.
 ## Dependencies and images
 
 Application versions and checksums live in `salt/states/client_apps/artifacts.json`.
-The private, checksum-pinned Paseo source archive is included under
+The checksum-pinned IDE source archive is included under
 `salt/states/client_apps/artifacts/`, so a clean client requires no access to the
 Paseo or platform repositories. Ubuntu packages still resolve through signed
 Ubuntu repositories; a Git SHA alone does not freeze those repositories.
