@@ -572,8 +572,48 @@ def version(**kwargs):
         return (_read(directory, "client-version.json") if directory is not None else None) or {}
 
 
+def _recovery_receipt(directory, request_id):
+    if not isinstance(request_id, str) or str(UUID(request_id)) != request_id:
+        raise _JobError("oduflow_job_recovery_invalid")
+    previous = _read(directory, "request-" + request_id + ".json")
+    if not isinstance(previous, dict) or previous.get("profile") != "configure":
+        raise _JobError("oduflow_job_recovery_invalid")
+    binding = _binding(
+        previous.get("jid"), request_id, "configure", "", previous.get("client_revision", "")
+    )
+    result = _existing(directory, binding, live=_running(directory, request_id))
+    if not result or result["status"] not in {"unknown", "failed"}:
+        raise _JobError("oduflow_job_recovery_not_inactive")
+    return binding, result
+
+
+def recovery_status(jid, request_id, client_revision="", **kwargs):
+    """Check one previous configure attempt while holding the execution lease."""
+    _metadata(kwargs)
+    expected = _binding(jid, request_id, "configure", "", client_revision)
+    with _directory(False) as directory:
+        if directory is None:
+            return {}
+        lock = _lock(directory)
+        if lock is None:
+            return {}
+        try:
+            binding, result = _recovery_receipt(directory, request_id)
+            if binding != expected:
+                raise _JobError("oduflow_job_binding_conflict")
+            return {"receipt": result, "idle": True}
+        finally:
+            os.close(lock)
+
+
 def run(
-    request_id, profile, state_data_json=None, client_revision="", state_sources_json=None, **kwargs
+    request_id,
+    profile,
+    state_data_json=None,
+    client_revision="",
+    state_sources_json=None,
+    recovery_of="",
+    **kwargs,
 ):
     _metadata(kwargs)
     high, digest = _payload(state_data_json) if profile == "custom" else (None, "")
@@ -587,6 +627,10 @@ def run(
     binding = _binding(
         kwargs.get("__pub_jid"), request_id, profile, digest, client_revision, source_digest
     )
+    if recovery_of and (
+        profile != "configure" or recovery_of == request_id or str(UUID(recovery_of)) != recovery_of
+    ):
+        raise _JobError("oduflow_job_recovery_invalid")
     _execution_options()
     _supported_runtime()
     try:
@@ -596,12 +640,26 @@ def run(
             try:
                 previous = _existing(directory, binding, live=_running(directory, request_id))
                 if previous:
+                    link = _read(directory, "recovery-" + request_id + ".json")
+                    if (link or {}).get("previous_request", "") != recovery_of:
+                        raise _JobError("oduflow_job_binding_conflict")
                     return previous
                 if lock is None:
                     return _result(binding, "unknown")
                 active_lock = _lock(directory, "request-" + request_id + ".lock")
                 if active_lock is None:
                     return _result(binding, "unknown")
+                if recovery_of:
+                    previous_binding, _ = _recovery_receipt(directory, recovery_of)
+                    _write(
+                        directory,
+                        "recovery-" + request_id + ".json",
+                        {
+                            "binding": binding,
+                            "previous_request": recovery_of,
+                            "previous_binding": previous_binding,
+                        },
+                    )
                 _write(directory, "jid-" + binding["jid"] + ".json", binding)
                 _write(directory, "request-" + request_id + ".json", _result(binding, "running"))
                 started_at = int(time.time())

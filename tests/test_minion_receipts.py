@@ -95,6 +95,35 @@ class MinionReceiptTests(unittest.TestCase):
         for path in self.root.iterdir():
             self.assertNotIn("PRIVATE-CANARY", path.read_text())
 
+    def test_explicit_recovery_preserves_unknown_attempt_and_binds_new_execution(self):
+        self.apply.side_effect = ValueError("PRIVATE-CANARY")
+        original = self.run_job()
+        original_bytes = self.receipt.read_bytes()
+        self.assertTrue(job.recovery_status(JID, REQUEST)["idle"])
+        self.apply.side_effect = None
+        next_jid = "20260912010000123457"
+        recovered = self.run_job(SECOND, jid=next_jid, recovery_of=REQUEST)
+        self.assertEqual(recovered["status"], "succeeded")
+        self.assertEqual(self.receipt.read_bytes(), original_bytes)
+        self.assertEqual(job.status(JID, REQUEST, "configure"), original)
+        self.assertEqual(self.run_job(SECOND, jid=next_jid, recovery_of=REQUEST), recovered)
+        self.assertEqual(self.apply.call_count, 2)
+        with self.assertRaisesRegex(RuntimeError, "binding_conflict"):
+            self.run_job(SECOND, jid=next_jid)
+
+    def test_recovery_refuses_live_worker_and_successful_or_foreign_attempts(self):
+        def execute(*args, **kwargs):
+            self.assertEqual(job.recovery_status(JID, REQUEST), {})
+            return {"ok": {"result": True}}
+
+        self.apply.side_effect = execute
+        self.run_job()
+        with self.assertRaisesRegex(RuntimeError, "recovery_not_inactive"):
+            job.recovery_status(JID, REQUEST)
+        with self.assertRaisesRegex(RuntimeError, "recovery_not_inactive"):
+            self.run_job(SECOND, jid="20260912010000123457", recovery_of=REQUEST)
+        self.apply.assert_called_once()
+
     def test_invalid_state_return_has_distinct_diagnostic_without_raw_errors(self):
         self.apply.return_value = ["Rendering failed: PRIVATE-CANARY"]
         self.assertEqual(self.run_job()["status"], "unknown")
