@@ -78,7 +78,7 @@ def checkout(config, parent, env):
         check_directory(target, os.getuid())
         if not (target / ".git").is_dir() or (target / ".git").is_symlink():
             raise SafeError("paseo_project_checkout_conflict")
-        origin = run(["git", "-C", str(target), "remote", "get-url", "origin"], env=env)
+        origin = run(["git", "-C", str(target), "config", "--get", "remote.origin.url"], env=env)
         if origin.removesuffix(".git") != url.removesuffix(".git"):
             raise SafeError("paseo_project_repository_mismatch")
         return target, False
