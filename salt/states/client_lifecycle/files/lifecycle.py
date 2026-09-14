@@ -171,6 +171,7 @@ def apply(instance_uuid, cycle, target):
         if previous["containers"] and not set(previous["containers"]).issubset(containers()):
             raise LifecycleError("client_lifecycle_containers_not_verified")
         run("/usr/local/libexec/oduflow-client-health")
+        run("/usr/local/libexec/oduflow-verify-production")
         previous["phase"] = "active"
         store(RECEIPT, previous)
 

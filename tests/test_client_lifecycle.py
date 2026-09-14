@@ -84,6 +84,7 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual(self.units, self.original)
         self.assertEqual(self.running, {CID})
         self.assertFalse(lifecycle.MARKER.exists())
+        self.assertIn(("/usr/local/libexec/oduflow-verify-production",), self.commands)
         self.assertFalse(
             any(
                 "salt-minion" in str(cmd) or "tailscale" in str(cmd) or "restic" in str(cmd)
