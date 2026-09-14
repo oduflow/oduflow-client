@@ -204,6 +204,8 @@ class StateContracts(unittest.TestCase):
         self.assertNotIn("include", data)
 
     def test_units_preserve_published_cli_and_private_proxy(self):
+        startup = args(high("client_apps/start.sls")["client-apps-paseo-running"])
+        self.assertIn({"cmd": "client-apps-install-paseo"}, startup["watch"])
         oduflow_unit = (STATES / "oduflow/files/oduflow.service").read_text()
         self.assertIn("UMask=0022", oduflow_unit)
         managed = high("oduflow/init.sls")

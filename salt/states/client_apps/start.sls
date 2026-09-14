@@ -45,6 +45,7 @@ client-apps-paseo-running:
 {% endif %}
 {% endif %}
     - watch:
+      - cmd: client-apps-install-paseo
       - file: paseo-config
       - file: paseo-password
       - file: paseo-unit-paseo.service
