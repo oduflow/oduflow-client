@@ -51,6 +51,16 @@ github-downloads-git-include:
       - file: github-downloads-git-config
       - pkg: client-apps-prerequisites
 
+github-downloads-parent-directory:
+  file.directory:
+    - name: /srv/oduflow/data/github-downloads
+    - user: root
+    - group: root
+    - mode: '0711'
+    - makedirs: true
+    - require:
+      - cmd: oduflow-storage-verify
+
 {% for user in ['root', 'paseo'] %}
 github-downloads-directory-{{ user }}:
   file.directory:
@@ -62,6 +72,7 @@ github-downloads-directory-{{ user }}:
     - require:
       - cmd: oduflow-storage-verify
       - user: paseo-user
+      - file: github-downloads-parent-directory
 {% for item in downloads %}
 github-downloads-key-{{ user }}-{{ item.identity }}:
   file.managed:
@@ -75,4 +86,29 @@ github-downloads-key-{{ user }}-{{ item.identity }}:
       - file: github-downloads-directory-{{ user }}
 {% endfor %}
 {% endfor %}
+{% set git = salt['pillar.get']('oduflow:git', {}) %}
+{% if git.get('auth') == 'ssh' and git.get('repo') in downloads | map(attribute='repository') | list %}
+github-downloads-retire-helper:
+  file.managed:
+    - name: /usr/local/libexec/oduflow-retire-github-token
+    - source: salt://github_downloads/files/retire-token.py
+    - user: root
+    - mode: '0700'
+    - makedirs: true
+
+github-downloads-retire-token:
+  cmd.run:
+    - name: /usr/local/libexec/oduflow-retire-github-token
+    - stateful: true
+    - output_loglevel: quiet
+    - require:
+      - cmd: oduflow-storage-verify
+      - file: github-downloads-retire-helper
+      - file: github-downloads-ssh-config
+      - cmd: github-downloads-git-include
+{% for item in downloads %}
+      - file: github-downloads-key-root-{{ item.identity }}
+      - file: github-downloads-key-paseo-{{ item.identity }}
+{% endfor %}
+{% endif %}
 {% endif %}

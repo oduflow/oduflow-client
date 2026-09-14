@@ -1,6 +1,7 @@
 """Repository transport, credential isolation and Salt rendering contracts."""
 
 import copy
+import importlib.util
 import json
 import os
 import subprocess
@@ -39,6 +40,10 @@ def pillar():
 class GitHubDownloadContracts(unittest.TestCase):
     def test_keys_stay_on_verified_volume_with_private_modes_and_hidden_changes(self):
         data = high("github_downloads/init.sls", pillar())
+        parent = args(data["github-downloads-parent-directory"])
+        self.assertEqual(parent["mode"], "0711")
+        self.assertEqual(parent["user"], "root")
+        self.assertIn({"cmd": "oduflow-storage-verify"}, parent["require"])
         for user in ("root", "paseo"):
             key = args(data[f"github-downloads-key-{user}-{UUID}"])
             self.assertEqual(key["mode"], "0600")
@@ -47,6 +52,7 @@ class GitHubDownloadContracts(unittest.TestCase):
             self.assertTrue(key["name"].startswith("/srv/oduflow/data/"))
             directory = args(data[f"github-downloads-directory-{user}"])
             self.assertIn({"cmd": "oduflow-storage-verify"}, directory["require"])
+            self.assertIn({"file": "github-downloads-parent-directory"}, directory["require"])
 
     def test_invalid_identity_or_path_cannot_render_credentials(self):
         for field, invalid in (
@@ -153,3 +159,35 @@ class GitHubDownloadContracts(unittest.TestCase):
                         for requirement in item.get("require", []):
                             for state, identifier in requirement.items():
                                 self.assertIn((state, identifier), identifiers)
+
+
+class RetireGitHubToken(unittest.TestCase):
+    def test_retirement_preserves_other_hosts_is_idempotent_and_rejects_symlinks(self):
+        path = Path(__file__).parents[1] / "salt/states/github_downloads/files/retire-token.py"
+        spec = importlib.util.spec_from_file_location("retire_github_token", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            module.STORE = Path(folder) / "credentials"
+            module.TOKEN = Path(folder) / "token"
+            module.STORE.write_text("https://user:secret@github.com\nhttps://u:p@example.org\n")
+            module.TOKEN.write_text("legacy-token")
+            module.STORE.chmod(0o600)
+            module.TOKEN.chmod(0o600)
+            self.assertTrue(module.retire())
+            self.assertEqual(module.STORE.read_text(), "https://u:p@example.org\n")
+            self.assertFalse(module.TOKEN.exists())
+            self.assertFalse(module.retire())
+            module.TOKEN.symlink_to(module.STORE)
+            with self.assertRaises(ValueError):
+                module.retire()
+
+    def test_cleanup_requires_own_repository_ssh_access(self):
+        value = pillar()
+        self.assertNotIn("github-downloads-retire-token", high("github_downloads/init.sls", value))
+        value["github_downloads"][0]["repository"] = value["oduflow"]["git"]["repo"]
+        data = high("github_downloads/init.sls", value)
+        self.assertIn(
+            {"cmd": "oduflow-storage-verify"},
+            args(data["github-downloads-retire-token"])["require"],
+        )

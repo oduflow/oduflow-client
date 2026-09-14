@@ -96,6 +96,22 @@ class CheckoutPreservation(unittest.TestCase):
         self.assertFalse(changed)
         self.assertEqual((target / "work.txt").read_text(), "uncommitted client work")
 
+    def test_repository_identity_survives_transport_rewrite(self):
+        transport = self.parent / "transport.gitconfig"
+        transport.write_text(
+            '[url "git@oduflow-download-fixture:oduflow/example-client.git"]\n'
+            "    insteadOf = https://github.com/oduflow/example-client.git\n"
+        )
+        env = dict(os.environ, GIT_CONFIG_SYSTEM=str(transport), GIT_CONFIG_GLOBAL=os.devnull)
+        rewritten = subprocess.check_output(
+            ["git", "-C", str(self.target), "remote", "get-url", "origin"], env=env, text=True
+        )
+        self.assertTrue(rewritten.startswith("git@oduflow-download-fixture:"))
+        target, changed = project.checkout(self.config, self.parent, env)
+        self.assertEqual(target, self.target)
+        self.assertFalse(changed)
+        self.assertEqual((target / "work.txt").read_text(), "uncommitted client work")
+
     def test_wrong_repository_and_symlink_are_refused(self):
         subprocess.run(
             [
