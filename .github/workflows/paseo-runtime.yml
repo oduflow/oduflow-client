@@ -1,6 +1,14 @@
 name: Build IDE runtime
 on:
   workflow_dispatch:
+    inputs:
+      ubuntu:
+        description: Target Ubuntu release
+        type: choice
+        default: '26.04'
+        options:
+          - '24.04'
+          - '26.04'
 permissions:
   contents: read
 jobs:
@@ -9,18 +17,20 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Build and verify on Ubuntu 26.04 amd64
+      - name: Build and verify on target Ubuntu amd64
+        env:
+          TARGET_UBUNTU: ${{ inputs.ubuntu }}
         run: |
           mkdir -p output
           docker run --rm --platform linux/amd64 \
-            -v "$PWD:/source:ro" -v "$PWD/output:/output" ubuntu:26.04 \
+            -v "$PWD:/source:ro" -v "$PWD/output:/output" "ubuntu:$TARGET_UBUNTU" \
             bash -euc 'export DEBIAN_FRONTEND=noninteractive
               apt-get update
               apt-get install -y python3 ca-certificates git build-essential pkg-config
-              python3 /source/scripts/build-paseo-runtime.py --ubuntu 26.04 --output /output'
+              python3 /source/scripts/build-paseo-runtime.py --output /output --ubuntu "$1"' -- "$TARGET_UBUNTU"
       - uses: actions/upload-artifact@v4
         with:
-          name: paseo-ubuntu26.04-amd64
+          name: paseo-ubuntu${{ inputs.ubuntu }}-amd64
           path: output/
           retention-days: 90
           if-no-files-found: error
