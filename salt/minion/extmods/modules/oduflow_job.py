@@ -62,7 +62,7 @@ def _metadata(values):
         raise _JobError("oduflow_job_arguments_invalid")
 
 
-def _binding(jid, request_id, profile, digest="", client_revision=""):
+def _binding(jid, request_id, profile, digest="", client_revision="", source_digest=""):
     try:
         if not isinstance(jid, str) or not re.fullmatch(r"[0-9]{20}", jid):
             raise ValueError
@@ -78,9 +78,16 @@ def _binding(jid, request_id, profile, digest="", client_revision=""):
         raise _JobError("oduflow_job_identity_invalid") from None
     if client_revision and not re.fullmatch(r"[0-9a-f]{40}", client_revision):
         raise _JobError("oduflow_job_revision_invalid")
+    if source_digest and (
+        profile not in ("litellm", "litellm_sync")
+        or client_revision
+        or not re.fullmatch(r"[0-9a-f]{64}", source_digest)
+    ):
+        raise _JobError("oduflow_job_sources_invalid")
     return dict(
+        **({"source_digest": source_digest} if source_digest else {}),
         **({"client_revision": client_revision} if client_revision else {}),
-        protocol=2 if client_revision else 1,
+        protocol=3 if source_digest else (2 if client_revision else 1),
         minion_id=_minion(),
         request_id=request_id,
         jid=jid,
@@ -356,17 +363,23 @@ def _execution_safety():
         salt.utils.files.fopen = original_open
 
 
-def capability(release=False, **kwargs):
+def capability(release=False, sources=False, **kwargs):
     _metadata(kwargs)
     minion_id = _minion()
     _execution_options()
     _supported_runtime()
-    return {"protocol": 2 if release else 1, "minion_id": minion_id, "profiles": list(_PROFILES)}
+    return {
+        "protocol": 3 if sources else (2 if release else 1),
+        "minion_id": minion_id,
+        "profiles": list(_PROFILES),
+    }
 
 
-def status(jid, request_id, profile, state_digest="", client_revision="", **kwargs):
+def status(
+    jid, request_id, profile, state_digest="", client_revision="", source_digest="", **kwargs
+):
     _metadata(kwargs)
-    binding = _binding(jid, request_id, profile, state_digest, client_revision)
+    binding = _binding(jid, request_id, profile, state_digest, client_revision, source_digest)
     try:
         with _directory(False) as directory:
             if directory is None:
@@ -400,12 +413,21 @@ def version(**kwargs):
         return (_read(directory, "client-version.json") if directory is not None else None) or {}
 
 
-def run(request_id, profile, state_data_json=None, client_revision="", **kwargs):
+def run(
+    request_id, profile, state_data_json=None, client_revision="", state_sources_json=None, **kwargs
+):
     _metadata(kwargs)
     high, digest = _payload(state_data_json) if profile == "custom" else (None, "")
     if profile != "custom" and state_data_json is not None:
         raise _JobError("oduflow_job_arguments_invalid")
-    binding = _binding(kwargs.get("__pub_jid"), request_id, profile, digest, client_revision)
+    source_digest = ""
+    if state_sources_json is not None:
+        if not isinstance(state_sources_json, str) or len(state_sources_json.encode()) > 524288:
+            raise _JobError("oduflow_job_sources_invalid")
+        source_digest = hashlib.sha256(state_sources_json.encode()).hexdigest()
+    binding = _binding(
+        kwargs.get("__pub_jid"), request_id, profile, digest, client_revision, source_digest
+    )
     _execution_options()
     _supported_runtime()
     try:
@@ -440,6 +462,10 @@ def run(request_id, profile, state_data_json=None, client_revision="", **kwargs)
                         if client_revision
                         else nullcontext({})
                     )
+                    if source_digest:
+                        local = __salt__["oduflow_release.sources_options"](
+                            state_sources_json, binding["minion_id"]
+                        )
                     with _execution_safety(), local as release_options:
                         options.update(release_options)
                         states = (

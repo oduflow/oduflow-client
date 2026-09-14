@@ -9,6 +9,8 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+
 __virtualname__ = "oduflow_release"
 __salt__ = {}
 __opts__ = {}
@@ -103,11 +105,10 @@ def checkout(commit):
 
 
 @contextmanager
-def local_options(commit, minion_id):
-    target = Path(checkout(commit))
+def _tree_options(target, minion_id, pillar=None):
     # Fetch from the authenticated master before switching the file client to
     # local mode. Pillar stays in memory and is never written into the checkout.
-    pillar = __salt__["pillar.items"]()
+    pillar = __salt__["pillar.items"]() if pillar is None else pillar
     if not isinstance(pillar, dict) or "client-" + pillar.get("instance_uuid", "") != minion_id:
         raise ValueError("client_release_pillar_identity_invalid")
     with tempfile.TemporaryDirectory(prefix="oduflow-release-", dir=_RUN_ROOT) as directory:
@@ -135,3 +136,62 @@ def local_options(commit, minion_id):
 def options(commit, minion_id):
     """Internal context manager used only by the durable job executor."""
     return local_options(commit, minion_id)
+
+
+@contextmanager
+def local_options(commit, minion_id):
+    pillar = __salt__["pillar.items"]()
+    if not isinstance(pillar, dict) or "client-" + pillar.get("instance_uuid", "") != minion_id:
+        raise ValueError("client_release_pillar_identity_invalid")
+    repository = pillar.get("client_repository")
+    if repository:
+        key, hosts = repository["private_key"], repository["known_hosts"]
+        serialization.load_ssh_private_key(key.encode(), password=None)
+        if not isinstance(hosts, str) or not hosts.startswith("github.com "):
+            raise ValueError("client_repository_host_keys_invalid")
+        CONFIG.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _trusted(CONFIG)
+        for name, content in (("key", key), ("known_hosts", hosts)):
+            target = CONFIG / name
+            if target.exists() or target.is_symlink():
+                _trusted(target, directory=False)
+            # Atomic replacement keeps Git from reading a partially written key.
+            fd, temporary = tempfile.mkstemp(prefix=".credential-", dir=CONFIG)
+            try:
+                with os.fdopen(fd, "w") as stream:
+                    stream.write(content)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, target)
+            finally:
+                Path(temporary).unlink(missing_ok=True)
+    with _tree_options(Path(checkout(commit)), minion_id, pillar) as value:
+        yield value
+
+
+@contextmanager
+def sources_options(source_json, minion_id):
+    """Apply an addressed infrastructure bundle without a public platform fileserver."""
+    if not isinstance(source_json, str) or len(source_json.encode()) > 524288:
+        raise ValueError("infrastructure_sources_invalid")
+    sources = json.loads(source_json)
+    if not isinstance(sources, dict) or not 1 <= len(sources) <= 200:
+        raise ValueError("infrastructure_sources_invalid")
+    with tempfile.TemporaryDirectory(prefix="oduflow-sources-", dir=_RUN_ROOT) as directory:
+        root = Path(directory)
+        states = root / "salt/states"
+        for name, content in sources.items():
+            path = Path(name)
+            if (
+                path.is_absolute()
+                or ".." in path.parts
+                or not path.parts
+                or not isinstance(content, str)
+                or "\x00" in name
+            ):
+                raise ValueError("infrastructure_sources_invalid")
+            target = states / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
+        with _tree_options(root, minion_id) as value:
+            yield value

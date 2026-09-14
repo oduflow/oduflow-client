@@ -79,6 +79,19 @@ class MinionReceiptTests(unittest.TestCase):
         self.assertEqual(job.version()["desired"], "b" * 40)
         self.assertEqual(job.version()["verified"], commit)
 
+    def test_addressed_infrastructure_sources_are_bound_without_public_fileserver(self):
+        source = '{"roles/litellm.sls":"test: {}"}'
+        job.__salt__["oduflow_release.sources_options"] = lambda *args: nullcontext({})
+        result = self.run_job(profile="litellm", state_sources_json=source)
+        self.assertEqual(result["protocol"], 3)
+        self.assertEqual(result["status"], "succeeded")
+        self.assertEqual(
+            job.status(JID, REQUEST, "litellm", "", "", result["source_digest"]), result
+        )
+        with self.assertRaisesRegex(RuntimeError, "binding_conflict"):
+            self.run_job(profile="litellm", state_sources_json=source + " ")
+        self.apply.assert_called_once()
+
     def test_claims_are_private_and_fsynced_before_execution_and_result_before_return(self):
         original = job.os.fsync
         synced = []
