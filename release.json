@@ -2,5 +2,8 @@
   "contract": 1,
   "version": "1.0.0",
   "salt": "3006.27",
-  "pillar_schema": 1
+  "pillar_schema": 1,
+  "features": [
+    "ide_runtime_auth_v1"
+  ]
 }

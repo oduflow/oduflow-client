@@ -66,7 +66,8 @@ client-apps-manifest:
     - contents: {{ dict(artifacts, paseo=dict(artifacts.paseo, install_method=method, runtime=runtime)) | tojson | tojson }}
     - user: root
     - group: root
-    - mode: '0644'
+    - mode: '0600'
+    - show_changes: false
     - require:
       - file: client-apps-cache
 
@@ -105,7 +106,7 @@ client-apps-paseo-artifact:
       - file: client-apps-cache
 {% endif %}
 
-{% if method == 'prebuilt' %}
+{% if method == 'prebuilt' and not runtime.get('token') %}
 client-apps-paseo-runtime:
   file.managed:
     - name: /var/cache/oduflow-apps/paseo-runtime.tar.gz
@@ -133,7 +134,7 @@ client-apps-install-paseo:
 {% if method == 'source' and artifacts.paseo.get('archive') %}
       - file: client-apps-paseo-artifact
 {% endif %}
-{% if method == 'prebuilt' %}
+{% if method == 'prebuilt' and not runtime.get('token') %}
       - file: client-apps-paseo-runtime
 {% endif %}
 {% endif %}

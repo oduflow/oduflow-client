@@ -118,3 +118,43 @@ class RuntimeInstallation(unittest.TestCase):
         ):
             data = high("client_apps/install.sls", {"paseo": paseo})
             self.assertEqual(list(data), ["client-apps-invalid-install-method"])
+
+    def test_authenticated_download_is_private_and_checksum_verified(self):
+        from unittest.mock import MagicMock
+
+        content = b"fixture-archive"
+        runtime = {
+            "source": "https://control.example.org/oduflow/ide/client/1",
+            "hash": "sha256=" + hashlib.sha256(content).hexdigest(),
+            "token": "t" * 43,
+        }
+        path = self.cache / "authenticated.tar.gz"
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.side_effect = [content, b""]
+        with patch.object(installer.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = response
+            installer.download_ide_runtime(runtime, path)
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.get_header("Authorization"), "Bearer " + runtime["token"])
+            self.assertNotIn(runtime["token"], request.full_url)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            installer.download_ide_runtime(runtime, path)
+            opener.return_value.open.assert_called_once()
+        for source in (
+            "http://control.example.org/archive",
+            "https://control.example.org/archive?token=bad",
+        ):
+            with self.assertRaises(ValueError):
+                installer.download_ide_runtime(dict(runtime, source=source), path)
+        with self.assertRaises(ValueError):
+            installer.NoRuntimeRedirect().redirect_request(
+                None, None, 302, "", {}, "https://elsewhere/"
+            )
+        data = high(
+            "client_apps/install.sls", {"paseo": {"install_method": "prebuilt", "runtime": runtime}}
+        )
+        self.assertNotIn("client-apps-paseo-runtime", data)
+        manifest = args(data["client-apps-manifest"])
+        self.assertEqual(manifest["mode"], "0600")
+        self.assertFalse(manifest["show_changes"])
