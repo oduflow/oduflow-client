@@ -200,7 +200,7 @@ def verify(helper, config_path=CONFIG, receipt_path=RECEIPT, factory=session):
         checks["local_hardened_identity"] = True
         runtime = tomllib.loads(helper.private_read(helper.ODUFLOW_CONFIG))
         paseo_host = runtime["route"]["paseo"]["host"]
-        if paseo_host != "paseo." + config["domain"]:
+        if paseo_host != "ide." + config["domain"]:
             raise CheckFailed()
         paseo_env = helper.private_read(PASEO_ENV)
         credentials = {}

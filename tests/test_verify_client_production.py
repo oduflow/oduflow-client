@@ -39,7 +39,7 @@ class VerificationTests(unittest.TestCase):
         values = {
             "/admin": "secret-admin-password",
             "/ui": "secret-ui-password",
-            "/toml": '[route.paseo]\nhost="paseo.client.example.org"\n',
+            "/toml": '[route.paseo]\nhost="ide.client.example.org"\n',
             mod.PASEO_ENV: (
                 "PASEO_PASSWORD=secret-paseo-password\nODUFLOW_MCP_TOKEN=secret-oduflow-mcp-token\n"
             ),
@@ -76,6 +76,12 @@ class VerificationTests(unittest.TestCase):
         self.assertTrue(request.call_args_list[1].args[2].endswith("/web/session/destroy"))
         self.assertNotIn("secret-", json.dumps(result))
         self.assertEqual(self.factory.call_count, 3)
+        self.assertTrue(
+            any(
+                call.args[2].startswith("https://ide.client.example.org/")
+                for call in request.call_args_list
+            )
+        )
 
     def test_replaced_container_stops_before_any_public_credentials(self):
         self.helper.verify_container.side_effect = ValueError("secret-container-details")
