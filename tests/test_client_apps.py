@@ -109,7 +109,7 @@ class StateContracts(unittest.TestCase):
             args(data["client-apps-paseo-artifact"])["source_hash"], paseo["archive"]["hash"]
         )
         manifest = args(data["client-apps-manifest"])
-        self.assertEqual(manifest["source"], "salt://client_apps/artifacts.json")
+        self.assertEqual(json.loads(manifest["contents"])["paseo"]["commit"], paseo["commit"])
 
     def test_bad_identity_or_secret_fails_without_runtime_states(self):
         for target in ["oduflow/init.sls", "paseo/init.sls", "client_apps/start.sls"]:

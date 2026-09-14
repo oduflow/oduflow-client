@@ -1,6 +1,12 @@
 # Package installation only: no service starts and no pillar secrets required.
 {% import_json 'client_apps/artifacts.json' as artifacts %}
-{% if grains.get('os') != 'Ubuntu' or grains.get('cpuarch') != 'x86_64' %}
+{% set method = salt['pillar.get']('paseo:install_method', 'source') %}
+{% set runtime = salt['pillar.get']('paseo:runtime', {}) %}
+{% if method not in ['source', 'prebuilt'] or (method == 'prebuilt' and (runtime is not mapping or runtime.get('source') is not string or runtime.get('hash') is not string or (runtime.hash | regex_match('sha256=[0-9a-f]{64}\\Z')) is none)) %}
+client-apps-invalid-install-method:
+  test.fail_without_changes:
+    - name: Select source or prebuilt with a runtime source and SHA256 checksum
+{% elif grains.get('os') != 'Ubuntu' or grains.get('cpuarch') != 'x86_64' %}
 client-apps-unsupported-platform:
   test.fail_without_changes:
     - name: Client application packages currently support Ubuntu amd64 only
@@ -57,7 +63,7 @@ client-apps-installer:
 client-apps-manifest:
   file.managed:
     - name: /var/cache/oduflow-apps/artifacts.json
-    - source: salt://client_apps/artifacts.json
+    - contents: {{ dict(artifacts, paseo=dict(artifacts.paseo, install_method=method, runtime=runtime)) | tojson | tojson }}
     - user: root
     - group: root
     - mode: '0644'
@@ -86,7 +92,7 @@ client-apps-install-oduflow:
       - archive: client-apps-uv
       - archive: client-apps-node
 
-{% if artifacts.paseo.get('archive') %}
+{% if method == 'source' and artifacts.paseo.get('archive') %}
 client-apps-paseo-artifact:
   file.managed:
     - name: /var/cache/oduflow-apps/paseo-{{ artifacts.paseo.commit }}.tar.gz
@@ -94,6 +100,18 @@ client-apps-paseo-artifact:
     - source_hash: {{ artifacts.paseo.archive.hash | tojson }}
     - user: root
     - group: root
+    - mode: '0600'
+    - require:
+      - file: client-apps-cache
+{% endif %}
+
+{% if method == 'prebuilt' %}
+client-apps-paseo-runtime:
+  file.managed:
+    - name: /var/cache/oduflow-apps/paseo-runtime.tar.gz
+    - source: {{ runtime.source | tojson }}
+    - source_hash: {{ runtime.hash | tojson }}
+    - user: root
     - mode: '0600'
     - require:
       - file: client-apps-cache
@@ -112,7 +130,10 @@ client-apps-install-paseo:
       - file: client-apps-manifest
       - archive: client-apps-uv
       - archive: client-apps-node
-{% if artifacts.paseo.get('archive') %}
+{% if method == 'source' and artifacts.paseo.get('archive') %}
       - file: client-apps-paseo-artifact
+{% endif %}
+{% if method == 'prebuilt' %}
+      - file: client-apps-paseo-runtime
 {% endif %}
 {% endif %}

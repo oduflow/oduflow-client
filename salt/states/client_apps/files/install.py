@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -144,6 +145,59 @@ def install_paseo(spec, target, node, env):
     run([str(node / "node"), "--check", str(entry)], env)
 
 
+def install_paseo_runtime(spec, target, node, env):
+    runtime = spec["runtime"]
+    if not re.fullmatch(r"sha256=[0-9a-f]{64}", runtime.get("hash", "")):
+        raise ValueError("Paseo runtime needs a SHA256 checksum")
+    archive_path = CACHE / "paseo-runtime.tar.gz"
+    with archive_path.open("rb") as stream:
+        digest = "sha256=" + hashlib.file_digest(stream, "sha256").hexdigest()
+    if digest != runtime["hash"]:
+        raise RuntimeError("Paseo runtime checksum mismatch")
+    host = platform.freedesktop_os_release()
+    expected = {
+        "contract": 1,
+        "os": host["ID"],
+        "os_version": host["VERSION_ID"],
+        "architecture": platform.machine(),
+        "node_version": node.parent.name.removeprefix("node-v").removesuffix("-linux-x64"),
+        "version": spec["version"],
+        "commit": spec["commit"],
+    }
+    # Verify compatibility before touching the installation, including on retries.
+    with tarfile.open(archive_path, "r:gz") as archive:
+        metadata = archive.extractfile("runtime.json")
+        if metadata is None or json.load(metadata) != expected:
+            raise RuntimeError("Paseo runtime does not match this host and pinned release")
+        members = archive.getmembers()
+        if any(
+            item.name not in ("runtime.json", "runtime") and not item.name.startswith("runtime/")
+            for item in members
+        ):
+            raise RuntimeError("Unexpected Paseo runtime archive path")
+        stage = CACHE / "paseo-runtime-stage"
+        shutil.rmtree(stage, ignore_errors=True)
+        try:
+            stage.mkdir()
+            archive.extractall(stage, filter="data")
+            if (
+                not (stage / "runtime" / SERVER_ENTRY).is_file()
+                or not (stage / "runtime/bin/paseo").exists()
+            ):
+                raise RuntimeError("Incomplete Paseo runtime")
+            for child in target.iterdir():
+                if child.name == ".install.lock":
+                    continue
+                if child.is_dir() and not child.is_symlink():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            shutil.copytree(stage / "runtime", target, dirs_exist_ok=True, symlinks=True)
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+    run([str(node / "node"), "--check", str(target / SERVER_ENTRY)], env)
+
+
 def install(app):
     manifest = json.loads(MANIFEST.read_text())
     spec = manifest[app]
@@ -163,8 +217,12 @@ def install(app):
         env["PATH"] = str(node) + ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
         if app == "oduflow":
             install_oduflow(spec, target, uv_bin(manifest), env)
-        else:
+        elif spec.get("install_method", "source") == "prebuilt":
+            install_paseo_runtime(spec, target, node, env)
+        elif spec.get("install_method", "source") == "source":
             install_paseo(spec, target, node, env)
+        else:
+            raise ValueError("Unknown Paseo installation method")
         if not executable.exists():
             raise RuntimeError("Application executable missing after installation")
         receipt.write_text(version + "\n")
