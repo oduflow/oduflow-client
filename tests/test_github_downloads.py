@@ -40,6 +40,10 @@ def pillar():
 class GitHubDownloadContracts(unittest.TestCase):
     def test_keys_stay_on_verified_volume_with_private_modes_and_hidden_changes(self):
         data = high("github_downloads/init.sls", pillar())
+        parent = args(data["github-downloads-parent-directory"])
+        self.assertEqual(parent["mode"], "0711")
+        self.assertEqual(parent["user"], "root")
+        self.assertIn({"cmd": "oduflow-storage-verify"}, parent["require"])
         for user in ("root", "paseo"):
             key = args(data[f"github-downloads-key-{user}-{UUID}"])
             self.assertEqual(key["mode"], "0600")
@@ -48,6 +52,7 @@ class GitHubDownloadContracts(unittest.TestCase):
             self.assertTrue(key["name"].startswith("/srv/oduflow/data/"))
             directory = args(data[f"github-downloads-directory-{user}"])
             self.assertIn({"cmd": "oduflow-storage-verify"}, directory["require"])
+            self.assertIn({"file": "github-downloads-parent-directory"}, directory["require"])
 
     def test_invalid_identity_or_path_cannot_render_credentials(self):
         for field, invalid in (

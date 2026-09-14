@@ -51,6 +51,16 @@ github-downloads-git-include:
       - file: github-downloads-git-config
       - pkg: client-apps-prerequisites
 
+github-downloads-parent-directory:
+  file.directory:
+    - name: /srv/oduflow/data/github-downloads
+    - user: root
+    - group: root
+    - mode: '0711'
+    - makedirs: true
+    - require:
+      - cmd: oduflow-storage-verify
+
 {% for user in ['root', 'paseo'] %}
 github-downloads-directory-{{ user }}:
   file.directory:
@@ -62,6 +72,7 @@ github-downloads-directory-{{ user }}:
     - require:
       - cmd: oduflow-storage-verify
       - user: paseo-user
+      - file: github-downloads-parent-directory
 {% for item in downloads %}
 github-downloads-key-{{ user }}-{{ item.identity }}:
   file.managed:
