@@ -1,0 +1,10 @@
+{% set uid = salt['pillar.get']('instance_uuid', '') %}
+{% set device = salt['pillar.get']('storage:device', '') %}
+{% set uid_pattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\Z' %}
+{% set valid_storage = salt['pillar.get']('schema', 0) == 1 and uid is string and (uid | regex_match(uid_pattern)) is not none and grains.get('id') == 'client-' ~ uid and device is string and (device | regex_match('/dev/disk/by-id/[A-Za-z0-9_.:+-]+\\Z')) is not none and salt['pillar.get']('storage:mount') == '/srv/oduflow/data' %}
+{% set dns = salt['pillar.get']('dns', {}) %}
+{% set settings = salt['pillar.get']('oduflow', {}) %}
+{% set paseo = salt['pillar.get']('paseo', {}) %}
+{% set email = salt['pillar.get']('ingress:acme:email', '') %}
+{% set host_pattern = '[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\\Z' %}
+{% set valid_config = valid_storage and dns is mapping and dns.get('oduflow') is string and (dns.get('oduflow') | regex_match(host_pattern)) is not none and dns.get('paseo') is string and (dns.get('paseo') | regex_match(host_pattern)) is not none and salt['pillar.get']('ingress:mode') == 'direct_tls' and email is string and '@' in email and '\n' not in email and settings is mapping and settings.get('auth_token') is string and (settings.auth_token | regex_match('[A-Za-z0-9_-]{16,}\\Z')) is not none and settings.get('database_password') is string and settings.get('database_password') | length >= 16 and settings.get('ui_password') is string and settings.get('ui_password') | length >= 16 and paseo is mapping and paseo.get('password') is string and (paseo.get('password') | regex_match('[A-Za-z0-9_-]{16,}\\Z')) is not none %}

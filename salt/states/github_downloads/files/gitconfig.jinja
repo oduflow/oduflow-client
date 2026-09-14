@@ -1,0 +1,7 @@
+# Managed by Salt. Client repository HTTPS credentials remain independent.
+{% for item in salt['pillar.get']('github_downloads', []) %}
+[url "git@oduflow-download-{{ item.identity }}:{{ item.repository }}.git"]
+    insteadOf = https://github.com/{{ item.repository }}.git
+    insteadOf = git@github.com:{{ item.repository }}.git
+    insteadOf = ssh://git@github.com/{{ item.repository }}.git
+{% endfor %}

@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+*.log
+packer/output/
+packer/*.pkrvars.hcl
+docker/protected/
+docker/platform-stack.json

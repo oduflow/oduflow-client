@@ -1,0 +1,15 @@
+[Unit]
+Description=Forward private Docker traffic to Paseo
+Requires=paseo.service
+After=paseo.service
+BindsTo=paseo.service srv-oduflow-data.mount
+
+[Service]
+User=paseo
+Group=paseo
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:6767
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX

@@ -1,0 +1,12 @@
+[Unit]
+Description=Private Docker gateway to Paseo loopback
+Requires=docker.service paseo.service
+After=docker.service paseo.service
+BindsTo=docker.service paseo.service srv-oduflow-data.mount
+
+[Socket]
+ListenStream=172.17.0.1:6768
+NoDelay=true
+
+[Install]
+WantedBy=multi-user.target

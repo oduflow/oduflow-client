@@ -1,0 +1,41 @@
+{% from 'client_apps/map.jinja' import valid_config with context %}
+{% set llm = salt['pillar.get']('paseo:llm', none) %}
+{% set configured = llm is not none %}
+{% set check = namespace(valid=valid_config and llm is mapping, models={}) %}
+{% set default_model = none %}
+{% set reasoning_effort = none %}
+{% set api_mode = 'chat_completions' %}
+{% if check.valid %}
+{# Plain HTTP is permitted only for literal IPv4 addresses in the Tailscale range.
+   Hostnames cannot opt into cleartext through DNS resolution or rebinding. #}
+{% set octet = '(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])' %}
+{% set vpn_host = '100\\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.' ~ octet ~ '\\.' ~ octet %}
+{% set port = '(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?' %}
+{% set path = '(?:/[A-Za-z0-9._~/-]*)?\\Z' %}
+{% set valid_url = llm.get('base_url') is string and ((llm.base_url | regex_match('https://[A-Za-z0-9.-]+(?::[0-9]+)?' ~ path)) is not none or (llm.base_url | regex_match('http://' ~ vpn_host ~ port ~ path)) is not none) %}
+{% set check.valid = llm.get('key') is string and (llm.key | regex_match('sk-[A-Za-z0-9_-]{16,}\\Z')) is not none and valid_url and llm.get('models') is sequence and llm.models is not string and llm.models is not mapping and llm.models | length > 0 %}
+{% if check.valid %}
+{% set default_model = llm.get('default_model', llm.models[0]) %}
+{% set reasoning_effort = llm.get('reasoning_effort', 'medium') %}
+{% set api_mode = llm.get('api_mode', 'chat_completions') %}
+{% set check.valid = default_model is string and default_model in llm.models and reasoning_effort in ['low', 'medium', 'high'] and api_mode in ['chat_completions', 'responses'] %}
+{% for model in llm.models %}
+{% if model is not string or (model | regex_match('[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}\\Z')) is none %}
+{% set check.valid = false %}
+{% else %}
+{% if model == default_model %}
+{% set model_options = {'reasoningEffort': reasoning_effort} %}
+{% if api_mode == 'responses' %}
+{% set _ = model_options.update({'store': false}) %}
+{% endif %}
+{% set _ = check.models.update({model: {'name': model, 'reasoning': true, 'options': model_options}}) %}
+{% else %}
+{% set _ = check.models.update({model: {'name': model}}) %}
+{% endif %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% set valid_agent = check.valid and grains.get('os') == 'Ubuntu' and grains.get('cpuarch') == 'x86_64' %}
+{% set agent_models = check.models %}
+{% set provider_npm = '@ai-sdk/openai' if api_mode == 'responses' else '@ai-sdk/openai-compatible' %}

@@ -1,0 +1,32 @@
+{% import_json 'client_apps/artifacts.json' as artifacts %}
+{%- set node = '/opt/oduflow/node/' ~ artifacts.node.version
+      ~ '/node-v' ~ artifacts.node.version ~ '-linux-x64/bin' %}
+{%- set paseo = '/opt/oduflow/paseo/' ~ artifacts.paseo.version ~ '+' ~ artifacts.paseo.commit[:12] -%}
+[Unit]
+Description=Paseo client web UI and agent daemon
+After=network-online.target srv-oduflow-data.mount
+Wants=network-online.target
+BindsTo=srv-oduflow-data.mount
+RequiresMountsFor=/srv/oduflow/data
+
+[Service]
+Type=simple
+User=paseo
+Group=paseo
+WorkingDirectory=/srv/paseo
+Environment=HOME=/srv/paseo
+Environment=PASEO_HOME=/srv/paseo
+Environment=PATH={{ node }}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/etc/paseo/credentials.env
+# The source build removed the launch flags: listen address, relay and web UI
+# come from the managed /srv/paseo/config.json, and `daemon run` is the
+# supported foreground deployment entrypoint.
+ExecStart={{ paseo }}/bin/paseo daemon run --home /srv/paseo
+UMask=0077
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

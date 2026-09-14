@@ -1,0 +1,7 @@
+{% from 'client_apps/map.jinja' import dns with context %}
+{% from 'client_agent/map.jinja' import valid_agent, llm, agent_models, default_model, provider_npm with context %}
+{% if not valid_agent %}
+{{ {'invalid_client_configuration': true} | tojson }}
+{% else %}
+{{ {'$schema': 'https://opencode.ai/config.json', 'autoupdate': false, 'share': 'disabled', 'mcp': {'oduflow': {'type': 'remote', 'url': 'https://' ~ dns.oduflow ~ '/mcp', 'enabled': true, 'oauth': false, 'headers': {'Authorization': 'Bearer {env:ODUFLOW_MCP_TOKEN}'}}}, 'enabled_providers': ['oduflow'], 'model': 'oduflow/' ~ default_model, 'small_model': 'oduflow/' ~ default_model, 'provider': {'oduflow': {'name': 'Oduflow LiteLLM', 'npm': provider_npm, 'options': {'baseURL': llm.base_url, 'apiKey': '{file:/srv/paseo/.config/opencode/litellm.key}'}, 'models': agent_models, 'whitelist': llm.models}}} | tojson }}
+{% endif %}

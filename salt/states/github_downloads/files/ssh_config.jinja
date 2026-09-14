@@ -1,0 +1,11 @@
+# Managed by Salt. Each repository has a separate read-only deploy key.
+{% for item in salt['pillar.get']('github_downloads', []) %}
+Host oduflow-download-{{ item.identity }}
+    HostName github.com
+    User git
+    IdentityFile /srv/oduflow/data/github-downloads/%u/{{ item.identity }}
+    IdentitiesOnly yes
+    HostKeyAlias github.com
+    StrictHostKeyChecking yes
+    UserKnownHostsFile /etc/ssh/oduflow-github-known-hosts
+{% endfor %}

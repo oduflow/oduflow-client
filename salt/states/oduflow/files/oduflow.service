@@ -1,0 +1,26 @@
+[Unit]
+Description=Oduflow client application manager
+After=docker.service containerd.service network-online.target
+Requires=docker.service
+BindsTo=docker.service srv-oduflow-data.mount
+RequiresMountsFor=/srv/oduflow/data
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/opt/oduflow/oduflow/1.76.0/bin/oduflow --transport http
+WorkingDirectory=/
+User=root
+Environment=TZ=UTC
+# Generated PostgreSQL configs and addon files are bind-mounted into containers
+# running as different users. Secret TOML and credential files retain explicit 0600.
+UMask=0022
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oduflow
+
+[Install]
+WantedBy=multi-user.target

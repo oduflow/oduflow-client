@@ -1,0 +1,35 @@
+{
+  "uv": {
+    "version": "0.12.13",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz",
+    "hash": "sha256=745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd"
+  },
+  "node": {
+    "version": "22.20.0",
+    "url": "https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz",
+    "hash": "sha256=00bbd05e306ea68b6e13e17360d0e2f680b493ef95f2fea1c4296ff7437530bc"
+  },
+  "oduflow": {
+    "version": "1.76.0",
+    "url": "https://files.pythonhosted.org/packages/d4/f5/47fb75b56abb7a956d21542d933fcd7352fa0c555ed65c56ebfc4b4bc834/oduflow-1.76.0-py3-none-any.whl",
+    "hash": "sha256=827e8c61f8db0b75b0bdf16f2f3563f1f8c21805574d31572a4545efb9ddf8bc"
+  },
+  "paseo": {
+    "version": "0.8.0",
+    "repository": "https://github.com/oduflow/paseo.git",
+    "commit": "3c04e96bce26c463305f49a317a6f5ee0863ee6f",
+    "archive": {
+      "source": "salt://client_apps/artifacts/paseo-3c04e96bce26c463305f49a317a6f5ee0863ee6f.tar.gz",
+      "hash": "sha256=cd4e24201def8a642f169bee90dcab3326363c2bfb8843229a234011e38bff3a"
+    },
+    "packages": [
+      "@getpaseo/highlight",
+      "@getpaseo/relay",
+      "@getpaseo/protocol",
+      "@getpaseo/client",
+      "@getpaseo/plugin",
+      "@getpaseo/server",
+      "@getpaseo/cli"
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+{% from 'client_apps/map.jinja' import dns, settings, email with context %}
+{% set client = settings.get('client_settings', {}) %}
+# Managed by Salt. Contains credentials; never include in diagnostics.
+[server]
+bind = "172.17.0.1"
+port = 8000
+disable_telemetry = {{ client.get('disable_telemetry', true) | tojson }}
+trace = {{ client.get('trace', false) | tojson }}
+allow_local_path = {{ client.get('allow_local_path', true) | tojson }}
+allow_insecure_http = false
+
+[storage]
+data_dir = "/srv/oduflow/data"
+overlay_threshold_mb = {{ client.get('overlay_threshold_mb', 50) | int }}
+
+[database]
+user = "odoo"
+# Distinct encrypted per-instance database credential from the control plane.
+password = {{ settings.database_password | tojson }}
+
+[routing]
+mode = "traefik"
+tls = true
+acme_email = {{ email | tojson }}
+
+[production]
+enabled = true
+workers_cap = {{ client.get('workers_cap', 8) | int }}
+
+[team.1]
+hostname = {{ dns.oduflow | tojson }}
+auth_token = {{ settings.auth_token | tojson }}
+ui_password = {{ settings.ui_password | tojson }}
+environment_hostname_mode = "branch"
+agent_enabled = {{ client.get('agent_enabled', false) | tojson }}
+agent_default = {{ client.get('agent_default', 'claude') | tojson }}
+{% for key, default in [('environment_slots', 5), ('service_slots', 3), ('db_quota_gb', 20), ('disk_quota_gb', 40)] %}
+{{ key }} = {{ settings.get(key, default) | int }}
+{% endfor %}
+
+[lifecycle]
+auto_stop_hours = {{ settings.get('auto_stop_hours', 0) | int }}
+auto_delete_hours = {{ settings.get('auto_delete_hours', 0) | int }}
+
+[route.paseo]
+host = {{ dns.paseo | tojson }}
+url = "http://172.17.0.1:6768"
+
+
+[agent]
+# The runtime image remains pinned by the application package/platform.
+claude_model = {{ client.get('claude_model', '') | tojson }}
+codex_model = {{ client.get('codex_model', '') | tojson }}
+opencode_model = {{ client.get('opencode_model', '') | tojson }}
+
+[team.1.agent_env]
+{% for key, value in client.get('agent_env', {}).items() %}
+{{ key | tojson }} = {{ value | tojson }}
+{% endfor %}
+
+{% if client.get('backup_enabled', false) %}
+[backup]
+bucket = {{ client.backup_bucket | tojson }}
+access_key = {{ client.backup_access_key | tojson }}
+secret_key = {{ client.backup_secret_key | tojson }}
+endpoint = {{ client.backup_endpoint | tojson }}
+region = {{ client.backup_region | tojson }}
+prefix = {{ client.backup_prefix | tojson }}
+snapshot_time = {{ client.backup_snapshot_time | tojson }}
+basebackup_time = {{ client.backup_basebackup_time | tojson }}
+keep = {{ client.retention | tojson }}
+walg_keep_full = {{ client.backup_walg_keep_full | int }}
+{% endif %}
+
+{% for route in client.get('routes', []) %}
+[route.{{ route.name | tojson }}]
+host = {{ route.host | tojson }}
+url = {{ route.url | tojson }}
+{% endfor %}

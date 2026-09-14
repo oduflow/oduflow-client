@@ -1,0 +1,5 @@
+{% from 'client_apps/map.jinja' import valid_config, settings, paseo with context %}
+{% set github = paseo.get('github') if paseo is mapping else none %}
+{% set git = settings.get('git') if settings is mapping else none %}
+{% set configured = github is not none or git is not none %}
+{% set valid_project = valid_config and github is mapping and git is mapping and git.get('host') == 'github.com' and git.get('repo') is string and (git.repo | regex_match('[A-Za-z0-9-]+/[A-Za-z0-9_][A-Za-z0-9_.-]*\\Z')) is not none and github.get('repo') == 'https://github.com/' ~ git.repo and git.get('username') is string and (git.username | regex_match('[A-Za-z0-9_-]{1,100}\\Z')) is not none and git.get('branch') is string and git.branch | length > 0 and ((git.get('auth') == 'ssh' and github.get('auth') == 'ssh' and salt['pillar.get']('github_downloads', [])) or (git.get('token') is string and (git.token | regex_match('[!-~]{16,4096}\\Z')) is not none and github.get('token') == git.token)) %}
