@@ -68,7 +68,7 @@ paseo-unit-paseo.service:
     - group: root
     - mode: '0644'
 
-{% for unit in ['paseo-proxy.socket', 'paseo-proxy.service'] %}
+{% for unit in ['paseo-proxy.socket', 'paseo-proxy.service', 'paseo-nightly-restart.service', 'paseo-nightly-restart.timer'] %}
 paseo-unit-{{ unit }}:
   file.managed:
     - name: /etc/systemd/system/{{ unit }}
@@ -85,4 +85,6 @@ paseo-systemd-reload:
       - file: paseo-unit-paseo.service
       - file: paseo-unit-paseo-proxy.socket
       - file: paseo-unit-paseo-proxy.service
+      - file: paseo-unit-paseo-nightly-restart.service
+      - file: paseo-unit-paseo-nightly-restart.timer
 {% endif %}

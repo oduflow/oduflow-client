@@ -54,6 +54,16 @@ client-apps-paseo-running:
       - file: client-agent-binary
 {% endif %}
 
+client-apps-paseo-nightly-restart-running:
+  service.running:
+    - name: paseo-nightly-restart.timer
+    - enable: true
+    - require:
+      - service: client-apps-paseo-running
+      - cmd: paseo-systemd-reload
+    - watch:
+      - file: paseo-unit-paseo-nightly-restart.timer
+
 client-apps-paseo-proxy-running:
   service.running:
     - name: paseo-proxy.socket

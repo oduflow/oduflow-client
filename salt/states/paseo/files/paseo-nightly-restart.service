@@ -1,0 +1,7 @@
+[Unit]
+Description=Nightly restart of the Paseo daemon
+
+[Service]
+Type=oneshot
+# Keep administratively stopped or suspended client services stopped.
+ExecStart=/usr/bin/systemctl try-restart paseo.service

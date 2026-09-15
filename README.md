@@ -31,6 +31,13 @@ the commit SHA is authoritative. The current contract requires Salt 3006.27 and
 pillar schema 1. Existing receipts without a revision remain historical records.
 Selecting an older SHA is not a database or filesystem rollback.
 
+## Scheduled maintenance
+
+Salt enables `paseo-nightly-restart.timer` when starting client applications.
+It restarts the running Paseo daemon daily at 04:00 in the client VM's local
+timezone. Missed runs during downtime are skipped. A stopped daemon stays stopped.
+The restart briefly interrupts Paseo connections and active agent work.
+
 ## Dependencies and images
 
 Application versions and checksums live in `salt/states/client_apps/artifacts.json`.

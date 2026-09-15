@@ -1,0 +1,11 @@
+[Unit]
+Description=Restart the Paseo daemon every night at 04:00
+
+[Timer]
+# Use the client VM's local timezone; do not catch up after downtime.
+OnCalendar=*-*-* 04:00:00
+Persistent=false
+Unit=paseo-nightly-restart.service
+
+[Install]
+WantedBy=timers.target
