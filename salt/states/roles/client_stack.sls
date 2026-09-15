@@ -6,3 +6,4 @@ include:
   - client_apps.health
   - client_ssh
   - github_downloads
+  - git_identity
