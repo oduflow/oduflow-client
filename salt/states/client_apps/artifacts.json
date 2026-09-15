@@ -31,5 +31,15 @@
       "@getpaseo/server",
       "@getpaseo/cli"
     ]
+  },
+  "agent_browser": {
+    "version": "0.37.1",
+    "url": "https://registry.npmjs.org/agent-browser/-/agent-browser-0.37.1.tgz",
+    "hash": "sha512=343a234d25eb22aef34b4f744f4570235bb306bc995af7b08315ef4b4b308fcff91869f388164b9b284491f1133bc9f89f70ec26965b664abd17f315dab2102b"
+  },
+  "chrome": {
+    "version": "153.0.8010.36",
+    "url": "https://storage.googleapis.com/chrome-for-testing-public/153.0.8010.36/linux64/chrome-linux64.zip",
+    "hash": "sha256=167a098c4fdec156b58a9f678c90a84f9072d789f9c6e7b35496a6987b8b7ef8"
   }
 }

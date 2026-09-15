@@ -36,6 +36,9 @@ client-apps-paseo-running:
       - file: paseo-home
       - cmd: client-agent-mcp-config
       - file: oduflow-paseo-storage-guard
+      - file: agent-browser-skill-opencode
+      - file: agent-browser-skill-claude
+      - file: agent-browser-skill-codex
 {% if configured %}
 {% if valid_agent %}
       - file: client-agent-config
@@ -61,6 +64,7 @@ client-apps-paseo-nightly-restart-running:
     - require:
       - service: client-apps-paseo-running
       - cmd: paseo-systemd-reload
+      - file: agent-browser-cleanup
     - watch:
       - file: paseo-unit-paseo-nightly-restart.timer
 

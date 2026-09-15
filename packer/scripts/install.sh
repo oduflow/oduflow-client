@@ -44,6 +44,10 @@ pathlib.Path('/etc/oduflow/image.json').write_text(json.dumps({'contract':'odufl
 releases={'oduflow':artifacts['oduflow']['version'],'paseo':artifacts['paseo']['version']+'+'+artifacts['paseo']['commit'][:12]}
 for app,release in releases.items():
     assert pathlib.Path('/opt/oduflow',app,release,'.installed').is_file(), 'Missing application installation receipt'
+assert subprocess.check_output(['agent-browser','--version'],text=True).strip() == 'agent-browser '+artifacts['agent_browser']['version']
+chrome=pathlib.Path('/opt/oduflow/chrome',artifacts['chrome']['version'],'chrome-linux64/chrome')
+assert artifacts['chrome']['version'] in subprocess.check_output([str(chrome),'--version'],text=True)
+assert pathlib.Path('/usr/local/share/oduflow/skills/agent-browser/SKILL.md').is_file()
 assert not pathlib.Path('/var/cache/oduflow-apps/paseo-src').exists(), 'Paseo build tree left in the image'
 for path in ['/var/lib/docker','/var/lib/containerd']:
     root=pathlib.Path(path)

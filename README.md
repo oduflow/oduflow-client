@@ -34,9 +34,34 @@ Selecting an older SHA is not a database or filesystem rollback.
 ## Scheduled maintenance
 
 Salt enables `paseo-nightly-restart.timer` when starting client applications.
-It restarts the running Paseo daemon daily at 04:00 in the client VM's local
-timezone. Missed runs during downtime are skipped. A stopped daemon stays stopped.
-The restart briefly interrupts Paseo connections and active agent work.
+Daily at 04:00 in the client VM's local timezone, it terminates Agent Browser,
+Chrome/Chromium and their descendants owned by `paseo`, then restarts the running
+Paseo daemon. Cleanup sends SIGTERM, allows 10 seconds for shutdown, then sends
+SIGKILL to survivors. It matches executable names and user IDs, never command-line
+substrings, and binds signals to process handles to prevent PID reuse races.
+Missed runs during downtime are skipped. A stopped Paseo daemon stays stopped.
+Maintenance interrupts active browser tests, Paseo connections and agent work.
+
+## Browser automation
+
+The credential-free `agent_browser.install` Salt state installs checksum-pinned
+Agent Browser and Chrome for Testing, including Linux libraries. It runs both
+for fresh clients and in the Packer image build. `agent-browser` is on the common
+CLI path; the shared browser binaries live under `/opt/oduflow`. Persistent user
+state lives under the `paseo` home on the verified client data volume; transient
+Chrome profiles use the system temporary directory.
+
+Client configuration installs the `agent-browser` skill for OpenCode
+(`~/.config/opencode/skills`), Claude (`~/.claude/skills`) and Codex
+(`~/.agents/skills`). These point to one managed discovery guide, which loads
+the version-matched upstream instructions with `agent-browser skills get core`.
+Other skills and agent configuration files are preserved.
+
+Each task should use a unique browser session and explicitly close it on success
+or failure. The browser daemon survives its calling agent; completing a turn,
+SIGTERM and SIGKILL are not session cleanup. The managed command defaults to a
+15-minute idle timeout through `AGENT_BROWSER_IDLE_TIMEOUT_MS`; explicit session
+overrides remain available. Nightly cleanup is the final fallback.
 
 ## Dependencies and images
 
@@ -60,6 +85,13 @@ ruff format --check salt scripts tests
 python3 -m unittest discover -s tests -v
 python3 scripts/validate-salt-minion.py
 ```
+
+On a disposable client with the packages installed, run
+`python3 scripts/verify-agent-browser-lifecycle.py` as `paseo`. This uses actual
+OpenCode, Agent Browser and Chrome with a local model fixture, checks page
+interaction and screenshots, and exercises normal exit, SIGTERM, SIGKILL,
+explicit close, idle expiry and nightly cleanup. It intentionally terminates
+browser processes of that user, so it must not run on an active client.
 
 Tests include real Git checkouts, Salt rendering/application, receipt durability,
 process death, storage refusals and application contracts. They do not prove live

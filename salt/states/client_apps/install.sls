@@ -15,6 +15,7 @@ include:
   - client_packages
   - paseo.packages
   - client_agent.cli
+  - agent_browser.install
 
 client-apps-prerequisites:
   pkg.installed:

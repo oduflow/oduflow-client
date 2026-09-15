@@ -1,0 +1,7 @@
+#!/bin/sh
+{% import_json 'client_apps/artifacts.json' as artifacts %}
+# Pin the shared browser while keeping per-session runtime data in the user's home.
+: "${AGENT_BROWSER_EXECUTABLE_PATH:=/opt/oduflow/chrome/{{ artifacts.chrome.version }}/chrome-linux64/chrome}"
+: "${AGENT_BROWSER_IDLE_TIMEOUT_MS:=900000}"
+export AGENT_BROWSER_EXECUTABLE_PATH AGENT_BROWSER_IDLE_TIMEOUT_MS
+exec /opt/oduflow/agent_browser/{{ artifacts.agent_browser.version }}/package/bin/agent-browser-linux-x64 "$@"

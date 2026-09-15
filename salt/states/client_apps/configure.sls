@@ -3,6 +3,7 @@ include:
   - oduflow
   - paseo
   - client_agent.mcp
+  - agent_browser
 
 {% from 'client_apps/map.jinja' import valid_config with context %}
 {% if valid_config %}

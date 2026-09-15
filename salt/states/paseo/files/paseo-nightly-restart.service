@@ -1,7 +1,9 @@
 [Unit]
-Description=Nightly restart of the Paseo daemon
+Description=Nightly browser cleanup and restart of the Paseo daemon
 
 [Service]
 Type=oneshot
+# Report cleanup failures in the journal and still perform the scheduled restart.
+ExecStart=-/usr/local/libexec/oduflow-browser-cleanup --user paseo
 # Keep administratively stopped or suspended client services stopped.
 ExecStart=/usr/bin/systemctl try-restart paseo.service
